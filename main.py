@@ -2,33 +2,24 @@
 
 import argparse
 import logging
-import socket
 import sys
 import yaml
 
-import falcon
+from aiohttp import web
+
 from handler import metricHandler
-from wsgiref import simple_server
 
 
-def falcon_app(config, logger, port=9200, addr='0.0.0.0'):
+def setup_app(config, logger, port=9200, addr='0.0.0.0'):
     logger.info(f'Starting Arista eAPI exporter on Port {addr}:{port}')
-    api = falcon.API()
-    api.add_route(
-        '/arista',
-        metricHandler(config=config)
+    api = web.Application()
+    handler = metricHandler(config=config)
+    api.add_routes([
+        web.get('/arista', handler.get)]
     )
-
     try:
-        httpd = simple_server.make_server(addr, port, api)
-    except Exception as e:
-        logger.error(f"Couldn't start Server: {e}")
-        return 1
-
-    try:
-        httpd.serve_forever()
+        web.run_app(api, host=addr, port=port)
     except KeyboardInterrupt:
-        httpd.server_close()
         logger.info('Stopping Arista eAPI Prometheus Server')
 
 
@@ -74,9 +65,9 @@ def main():
               '%(filename)s:%(lineno)d %(message)s')
     logging.basicConfig(stream=sys.stdout, format=format)
 
-    falcon_app(config, logger,
-               port=config['listen_port'],
-               addr=config['listen_addr'])
+    setup_app(config, logger,
+              port=config['listen_port'],
+              addr=config['listen_addr'])
 
 
 if __name__ == '__main__':
